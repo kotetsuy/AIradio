@@ -21,8 +21,14 @@ from common import load_state, save_state
 PLAYS_KEY = "bgm_plays"
 
 # 使用済みを寄せておく場所。すぐ消さないのは、生成が詰まったときに手で戻して
-# 延命できるようにするため。古いものの掃除は start_all.sh。
+# 延命できるようにするため (プールが枯れたらここからランダムに戻せる)。
 USED_SUBDIR = "used"
+
+# used/ に残す曲数の既定。1 曲 5 MB あるので放っておくと際限なく増える
+# (reuse_count = 5 / 1 サイクル 60 秒なら 3 日で約 850 曲 = 4.2 GB)。
+# start_all.sh も 3 日より古いものを消すが、あれは起動時にしか走らないので
+# 連続運転では効かない。退避するたびにここで削る。
+USED_KEEP_DEFAULT = 100
 
 
 def prompt_hash(prompt: str, duration_sec: float) -> str:
@@ -48,7 +54,37 @@ def pool_files(pool_dir: Path) -> list[Path]:
     return sorted(files, key=lambda p: p.stat().st_mtime)
 
 
-def take_bgm(pool_dir: Path, state_path: Path, reuse_count: int = 1) -> Path | None:
+def trim_used(pool_dir: Path, keep: int = USED_KEEP_DEFAULT) -> int:
+    """used/ を新しい順に keep 曲だけ残して消す。消した数を返す。
+
+    「新しい順」の基準は mtime。take_bgm は再生のたびに os.utime するので、
+    最後に鳴った時刻が新しいものほど残る。keep <= 0 なら何もしない
+    (無制限にしたいときの逃げ道)。
+    """
+    used_dir = pool_dir / USED_SUBDIR
+    if keep <= 0 or not used_dir.is_dir():
+        return 0
+    files = sorted(
+        (p for p in used_dir.glob("*.wav") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    removed = 0
+    for path in files[keep:]:
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed += 1
+    return removed
+
+
+def take_bgm(
+    pool_dir: Path,
+    state_path: Path,
+    reuse_count: int = 1,
+    used_keep: int = USED_KEEP_DEFAULT,
+) -> Path | None:
     """次に流す 1 曲を返す。プールが空なら None。
 
     reuse_count 回まで同じ曲を使い回してから used/ へ退ける。gfx1151 では
@@ -82,6 +118,13 @@ def take_bgm(pool_dir: Path, state_path: Path, reuse_count: int = 1) -> Path | N
         plays.pop(src.name, None)
         state[PLAYS_KEY] = plays
         save_state(state_path, state)
+        # これから鳴らす曲なので「最後に鳴った時刻」を今にしておく。
+        # shutil.move は mtime を保つので、これが無いと reuse_count = 1 の
+        # ときに (一度も utime されないまま) 直後の trim_used で消されうる。
+        os.utime(dst)
+        # いま入れたぶんを含めて上限まで削る。これを起動時の掃除だけに任せると
+        # 連続運転で際限なく増える
+        trim_used(pool_dir, used_keep)
         return dst
 
     plays[src.name] = count

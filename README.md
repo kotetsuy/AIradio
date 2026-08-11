@@ -199,6 +199,7 @@ no second copy to keep in sync.
 | `[bgm] duration_sec` | `30` | clip length (**an upper bound** — clips often end early) |
 | `[bgm] min_duration_sec` | `18` | clips shorter than this are discarded and regenerated |
 | `[bgm] pool_target` | `3` | target stock in the pool |
+| `[bgm] used_keep` | `100` | how many played clips to keep in `used/` (5 MB each); 0 or less means unlimited |
 | `[bgm] reuse_count` | `5` | how many cycles one clip is replayed before retiring |
 | `[script] max_chars` | `220` | script length (≈30 s) |
 | `[script] filler_max_chars` | `60` | small-talk length (≈5–10 s) |
@@ -220,7 +221,7 @@ clips on its next start (the prompt fingerprint is in the filename).
 
 ```
 cache/bgm_pool/       generated music waiting to be played
-cache/bgm_pool/used/  already played; start_all.sh deletes after 3 days
+cache/bgm_pool/used/  already played; trimmed to [bgm] used_keep, oldest first
 cache/fillers/        interjection wavs, generated once at startup
 cache/scripts_tts/    news scripts and small talk
 db/state.json         exclusion ring and music play counts (kept across restarts)

@@ -40,7 +40,7 @@ from aiohttp import web
 import dj_script
 import voicevox_synth
 from audio import AudioError, wav_duration
-from bgm_pool import take_bgm
+from bgm_pool import USED_KEEP_DEFAULT, take_bgm
 from common import (
     PROJECT_ROOT,
     append_script_log,
@@ -96,6 +96,8 @@ class NewsService:
         self.state_path = resolve_path(settings["paths"]["state"])
         # 同じ曲を何サイクル使い回すか。生成が実時間に追いつかないための緩和策
         self.reuse_count = int(settings["bgm"].get("reuse_count", 1))
+        # used/ に残す曲数。0 以下で無制限
+        self.used_keep = int(settings["bgm"].get("used_keep", USED_KEEP_DEFAULT))
         self.crawler_dir = resolve_path(settings["news"]["crawler_dir"])
 
         self.selector = NewsSelector(settings)
@@ -309,7 +311,9 @@ class NewsService:
     # ---- キュー投入 ------------------------------------------------------
 
     def _take_music(self) -> Item | None:
-        path = take_bgm(self.pool_dir, self.state_path, self.reuse_count)
+        path = take_bgm(
+            self.pool_dir, self.state_path, self.reuse_count, self.used_keep
+        )
         if path is None:
             return None
         try:

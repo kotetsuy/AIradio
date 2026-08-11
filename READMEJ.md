@@ -197,6 +197,7 @@ PYTHONPATH=scripts ~/heartlib/.venv/bin/python scripts/bench_phase0.py --clips 3
 | `[bgm] duration_sec` | `30` | BGM の尺 (**上限**。短く終わることがある) |
 | `[bgm] min_duration_sec` | `18` | これより短く出来た曲は捨てて作り直す |
 | `[bgm] pool_target` | `3` | プール目標在庫数 |
+| `[bgm] used_keep` | `100` | `used/` に残す再生済みの曲数（1曲5MB）。0以下で無制限 |
 | `[bgm] reuse_count` | `5` | 同じ曲を何サイクル使い回してから捨てるか |
 | `[script] max_chars` | `220` | 原稿の長さ (≒30秒) |
 | `[script] filler_max_chars` | `60` | ショートトークの長さ (≒5〜10秒) |
@@ -218,7 +219,7 @@ BGM のプロンプトか尺を変えると、bgm_worker が次の起動時に**
 
 ```
 cache/bgm_pool/       生成済み BGM (再生待ち)
-cache/bgm_pool/used/  再生済み。start_all.sh が3日で消す
+cache/bgm_pool/used/  再生済み。[bgm] used_keep 曲だけ残して古いものから消える
 cache/fillers/        相槌 wav (起動時に事前生成、以後使い回し)
 cache/scripts_tts/    ニュース原稿とショートトークの wav
 db/state.json         除外リングと BGM の再生回数 (再起動をまたいで持ち越す)
