@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+cache/
+logs/
+db/
+config/settings.local.toml
+vroid/*.vrm
+
+# 実行したマシンの絶対パス (/home/<ユーザー名>/…) が入るので公開しない。
+# 保存中に settings.local.json.tmp.<pid>.<hash> が一瞬できるので丸ごと除外する。
+# チームで共有する .claude/settings.json を置きたくなったら
+# `!.claude/settings.json` を足して個別に許可すること。
+.claude/

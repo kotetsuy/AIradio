@@ -1,0 +1,120 @@
+# AIradio 設定
+# パスは相対指定の場合、プロジェクトルート (このファイルの親の親) からの相対解決。
+#
+# 個人環境固有の値 (crawler_dir の絶対パス、Icecast のパスワード等) は
+# config/settings.local.toml (git 管理外) に同じ構造で一部だけ書けば上書きされる。
+#
+# 設定変更の反映は stop_all.sh → 編集 → start_all.sh の再起動運用。
+# ホットリロードは実装しない (TECHNICALJ.md §2-3)。
+
+[paths]
+# 原稿・フィラーの wav 置き場
+scripts_tts = "cache/scripts_tts"
+fillers = "cache/fillers"
+log = "logs/program.log"
+state = "db/state.json"
+
+[news]
+# Gcrawler の news/ への相対 or 絶対パス
+crawler_dir = "../Gcrawler/news"
+# 選定対象の日数 (今日を含む直近 N 日)
+days = 3
+# 直近除外するニュース件数
+exclude_ring = 10
+
+[bgm]
+prompts = [
+  "lo-fi hip hop, chill, relaxing, mellow beats, warm tape texture",
+]
+# "fixed" = prompts[0] 固定。将来 "random" / "sequential" に拡張予定
+prompt_mode = "fixed"
+duration_sec = 30
+# 出来上がった曲がこれより短ければ捨てて作り直す。
+# HeartMuLa は audio_eos が出た時点で打ち切るので duration_sec は上限でしかなく、
+# 2 秒で終わることもある (TECHNICALJ.md §6.2)。生成時間は尺にほぼ比例するので、
+# 短すぎる曲を捨てる損は小さい。
+min_duration_sec = 18
+# プール目標在庫数
+pool_target = 3
+pool_dir = "cache/bgm_pool"
+# 同じ曲を何サイクル使い回してから捨てるか。
+# gfx1151 実測で BGM の生成は実時間の 4〜5 倍かかり、1 サイクル 1 曲の消費には
+# 追いつかない (TECHNICALJ.md §6)。1 にすると FILLER_LOOP が常態化する。
+# 収支の目安: 生成時間 (= 4.7 × duration_sec) ≦ reuse_count × 1サイクルの秒数
+# 5 なら消費が約 300 秒/曲。実測の生成能力は 152〜165 秒/曲 なので約 2 倍の余裕。
+# 能力は「生成していた時間 ÷ 採用曲数」で測ること。worker は在庫が pool_target に
+# 達すると休むので、「運転時間 ÷ 採用曲数」は需要で頭打ちになる (TECHNICALJ.md §6.7)。
+reuse_count = 5
+# HeartMuLa 一式 (ckpt/) の場所。bgm_worker はこの venv の python で走る
+model_path = "~/heartlib/ckpt"
+python = "~/heartlib/.venv/bin/python"
+version = "3B"
+temperature = 1.0
+topk = 50
+cfg_scale = 1.5
+# 生成に失敗したときの再試行までの待ち (秒)
+retry_wait_sec = 30
+
+[script]
+# 原稿の最大文字数 (VOICEVOX の読み上げでおよそ 30 秒)
+max_chars = 220
+# ショートトーク上限 (およそ 5〜10 秒)
+filler_max_chars = 60
+# 合成後の wav がこの秒数を超えたら原稿を作り直す
+max_wav_sec = 35.0
+# 作り直しの上限回数 (超えたらそのまま流す)
+max_regen = 1
+
+[loudness]
+# 全 wav を投入前に EBU R128 で揃える
+target_lufs = -16.0
+target_lra = 11.0
+target_tp = -1.5
+sample_rate = 44100
+
+[llm]
+base_url = "http://localhost:8080"
+model = "qwen3.6"
+max_tokens = 512
+temperature = 0.8
+# プロンプトに添付する直近原稿数 (言い回しの重複回避)
+recent_scripts = 3
+
+[voicevox]
+base_url = "http://localhost:50021"
+speaker_name = "波音リツ"
+style_name = "ノーマル"
+# audio_query の volumeScale。loudnorm で最終的に揃えるので 1.0 でよいが、
+# 小さすぎるとノーマライズでノイズが持ち上がるため少し上げておく。
+volume_scale = 1.6
+
+[dj]
+# 番組名と DJ 設定。原稿・INTRO のプロンプトに渡す
+program_name = "AIラジオ ギガジンニュース"
+persona = "落ち着いた声の、ちょっとお茶目なAIラジオDJ"
+source_name = "GIGAZINE"
+
+[liquidsoap]
+telnet_host = "127.0.0.1"
+telnet_port = 1234
+# 本プロジェクトはスピーチ・フィラー・音楽をすべて 1 本のキューに
+# 逐次投入する (ダッキングではなく順番に鳴らす)。
+queue = "program"
+icecast_output = "radio_ice"
+local_output = "radio_local"
+
+[icecast]
+host = "localhost"
+# 8000 は表示系の three-vrm が使うため 8100。config/icecast.xml と揃えること。
+port = 8100
+mount = "radio.mp3"
+password = "hackme"
+
+[program]
+# 表示系 (VRMアバター) と WebSocket / track_event を同じポートで出す
+websocket_host = "0.0.0.0"
+websocket_port = 8765
+# wav を push してから実際に音が出るまでのズレ (リップシンク補正)
+lipsync_delay_ms = 300
+# トラック終了の何秒前に次の投入判断をするか (無音を作らないための先回り)
+prefetch_lead_sec = 3.0

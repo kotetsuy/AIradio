@@ -1,0 +1,19 @@
+# config/settings.local.toml のひな形。
+# このファイルをコピーして settings.local.toml を作ると、settings.toml を
+# キー単位で再帰的に上書きできる (テーブルごと潰さない)。git 管理外。
+#
+#   cp config/settings.local.toml.example config/settings.local.toml
+
+# [news]
+# crawler_dir = "/home/you/Gcrawler/news"
+
+# [icecast]
+# password = "your-password"
+
+# [voicevox]
+# speaker_name = "ずんだもん"
+# style_name = "ノーマル"
+
+# [bgm]
+# prompts = ["ambient, calm, soft pads, slow"]
+# pool_target = 5

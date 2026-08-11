@@ -1,0 +1,356 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>AIradio</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; overflow: hidden;
+    background: #12121c; color: #eaeaf2;
+    font-family: system-ui, "Noto Sans JP", sans-serif;
+  }
+  /* 背景は WebGL ではなく DOM 側で持つ。CSS の background-size:cover に
+     任せられるので、アスペクト比の違う画像でも歪まない。
+     canvas は alpha:true なので、この上にアバターだけが乗る。 */
+  #bg {
+    position: fixed; inset: 0; z-index: -2;
+    background-color: #12121c;
+    background-size: cover; background-position: top center;
+    /* ニュースのスクショは文字が主体なので、読ませずに雰囲気だけ残す。
+       ぼかし量は画像の解像度に応じて JS 側で決める (setBackground 参照)。
+       scale はぼかしで縁が透けるのを防ぐため。 */
+    filter: blur(14px) brightness(.5);
+    transform: scale(1.06);
+    transition: filter .4s ease;
+  }
+  /* スクショは白背景が多いので、文字が読めるように上下を暗く落とす */
+  #bg::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(
+      to bottom, rgba(0,0,0,.6) 0%, rgba(0,0,0,.25) 30%,
+                 rgba(0,0,0,.25) 55%, rgba(0,0,0,.75) 100%);
+  }
+  canvas { display: block; position: fixed; inset: 0; z-index: -1; }
+
+  #status {
+    position: fixed; top: 10px; left: 12px; z-index: 10;
+    font-size: 12px; color: #8a8aa0;
+  }
+  #phase {
+    position: fixed; top: 10px; right: 12px; z-index: 10;
+    font-size: 12px; letter-spacing: .08em; color: #8a8aa0;
+  }
+
+  /* VOICEVOX の利用規約で求められるクレジット表示。
+     話者は settings.toml から来るので、変更すればここも追従する。 */
+  #credit {
+    position: fixed; bottom: 12px; left: 14px; z-index: 10;
+    font-size: 12px; color: #b4b4c8; letter-spacing: .02em;
+    text-shadow: 0 1px 6px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,.8);
+    user-select: none;
+  }
+
+  /* 出典表示。TECHNICALJ.md §4 で常時表示と決めている */
+  #headline {
+    position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 10; text-align: center; max-width: 90vw;
+  }
+  #headline > * { text-shadow: 0 2px 10px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,.7); }
+  #source {
+    font-size: 12px; letter-spacing: .12em; color: #ffd48a;
+    text-transform: uppercase;
+  }
+  #title { font-size: 24px; font-weight: 600; margin-top: 6px; line-height: 1.4; }
+
+  #subtitle {
+    position: fixed; bottom: 124px; left: 50%; transform: translateX(-50%);
+    z-index: 10; max-width: 44em; padding: 12px 20px;
+    background: rgba(0,0,0,.6); border-radius: 10px;
+    font-size: 17px; line-height: 1.65; text-align: center;
+    display: none;
+  }
+
+  #transport {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 14px;
+  }
+  button {
+    width: 72px; height: 72px; border-radius: 50%;
+    border: 1px solid #34344a; background: #1e1e2e; color: #eaeaf2;
+    font-size: 24px; cursor: pointer; transition: background .12s, opacity .12s;
+  }
+  button:hover:not(:disabled) { background: #2a2a40; }
+  button:active:not(:disabled) { background: #35354f; }
+  button:disabled { opacity: .32; cursor: not-allowed; }
+</style>
+
+<div id="bg"></div>
+
+<div id="status">接続中…</div>
+<div id="phase"></div>
+
+<div id="headline">
+  <div id="source"></div>
+  <div id="title"></div>
+</div>
+
+<div id="subtitle"></div>
+
+<div id="credit"></div>
+
+<div id="transport">
+  <button id="playpause" title="再生 / 一時停止">⏸</button>
+  <button id="skip"      title="次のニュースへ">⏭</button>
+</div>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "/libs/three/three.module.js",
+      "three/addons/": "/libs/three/addons/",
+      "@pixiv/three-vrm": "/libs/three-vrm/three-vrm.module.min.js"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as THREE from "three";
+  import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+  import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+
+  const VRM_URL = "/vrm/dj.vrm";
+  const WS_URL = `ws://${location.host}/ws`;
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+  const setStatus = (s) => (statusEl.textContent = s);
+
+  // VOICEVOX の viseme 名 → VRM の表情名
+  const VISEME_MAP = {
+    aa: "aa", I: "ih", U: "ou", E: "ee", O: "oh", nn: "nn", sil: null,
+  };
+
+  // ---- Three.js --------------------------------------------------------
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
+
+  // 背景は #bg (CSS) が持つので、シーンは透過のままにする
+  const scene = new THREE.Scene();
+
+  // バストアップ。顔だけのアップにするとトランスポートボタンが体に重なるので、
+  // 少し引いて下半分に UI の余白を作る。
+  const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 20);
+  camera.position.set(0, 1.28, 2.4);
+  camera.lookAt(0, 1.18, 0);
+
+  const light = new THREE.DirectionalLight(0xffffff, 1.2);
+  light.position.set(1, 2, 2);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+  addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  let vrm = null;
+  const clock = new THREE.Clock();
+
+  // ---- リップシンク ----------------------------------------------------
+  // 音声は Liquidsoap が鳴らしているので、ブラウザは音を出さない。
+  // したがって AudioContext の時計は使えず、performance.now() で進める。
+  let visemeSchedule = []; // [{time(ms), name}] 昇順
+
+  function scheduleVisemes(msg) {
+    const base = performance.now() + (msg.delay_ms ?? 0);
+    const items = [];
+    const { visemes = [], vtimes = [], vdurations = [] } = msg;
+    for (let i = 0; i < visemes.length; i++) {
+      const t0 = base + (vtimes[i] ?? 0);
+      items.push({ time: t0, name: visemes[i] });
+      items.push({ time: t0 + (vdurations[i] ?? 100), name: "sil" });
+    }
+    items.sort((a, b) => a.time - b.time);
+    visemeSchedule = items;
+  }
+
+  function applyViseme(name) {
+    if (!vrm?.expressionManager) return;
+    const mgr = vrm.expressionManager;
+    for (const v of Object.values(VISEME_MAP)) if (v) mgr.setValue(v, 0);
+    const expr = VISEME_MAP[name];
+    if (expr) mgr.setValue(expr, 1.0);
+  }
+
+  // ---- 待機モーション(呼吸・体揺れ・頭の微動)------------------------
+  const IDLE = { breathHz: 0.25, swayHz: 0.13, headHz: 0.08 };
+  // 音楽が鳴っているあいだは少しだけ揺れを大きくする
+  let grooving = false;
+
+  function applyIdlePose(t) {
+    if (!vrm?.humanoid) return;
+    const get = (n) => vrm.humanoid.getNormalizedBoneNode(n);
+    const spine = get("spine");
+    const chest = get("chest") || get("upperChest");
+    const neck = get("neck");
+    const head = get("head");
+
+    const gain = grooving ? 2.0 : 1.0;
+    const breath = Math.sin(t * 2 * Math.PI * IDLE.breathHz);
+    const sway = Math.sin(t * 2 * Math.PI * IDLE.swayHz * (grooving ? 3 : 1));
+    const sway2 = Math.sin(t * 2 * Math.PI * IDLE.swayHz * 1.3 + 0.7);
+
+    if (spine) { spine.rotation.x = breath * 0.012; spine.rotation.z = sway * 0.02 * gain; }
+    if (chest) { chest.rotation.x = breath * 0.008; chest.rotation.z = sway2 * 0.012; }
+    if (neck) neck.rotation.z = sway * 0.01 * gain;
+    if (head) {
+      head.rotation.x = Math.sin(t * 2 * Math.PI * IDLE.headHz * 1.3 + 1.3) * 0.015;
+      head.rotation.y = Math.sin(t * 2 * Math.PI * IDLE.headHz) * 0.03;
+    }
+  }
+
+  function applyRestPose() {
+    if (!vrm?.humanoid) return;
+    const get = (n) => vrm.humanoid.getNormalizedBoneNode(n);
+    const lUp = get("leftUpperArm"), rUp = get("rightUpperArm");
+    const lLo = get("leftLowerArm"), rLo = get("rightLowerArm");
+    if (lUp) lUp.rotation.z = -1.3;
+    if (rUp) rUp.rotation.z = 1.3;
+    if (lLo) lLo.rotation.y = 0.25;
+    if (rLo) rLo.rotation.y = -0.25;
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (vrm) {
+      applyIdlePose(performance.now() / 1000);
+      const now = performance.now();
+      while (visemeSchedule.length && visemeSchedule[0].time <= now) {
+        applyViseme(visemeSchedule.shift().name);
+      }
+      vrm.update(delta);
+    }
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ---- VRM 読み込み ----------------------------------------------------
+  const loader = new GLTFLoader();
+  loader.register((parser) => new VRMLoaderPlugin(parser));
+  setStatus("VRM 読み込み中…");
+  loader.load(
+    VRM_URL,
+    (gltf) => {
+      vrm = gltf.userData.vrm;
+      VRMUtils.removeUnnecessaryJoints(gltf.scene);
+      scene.add(gltf.scene);
+      VRMUtils.rotateVRM0(vrm);
+      applyRestPose();
+      connectWS();
+    },
+    (p) => p.lengthComputable &&
+      setStatus(`VRM 読み込み中… ${Math.round((p.loaded / p.total) * 100)}%`),
+    (err) => setStatus("VRM 読み込み失敗: " + err.message),
+  );
+
+  // ---- WebSocket -------------------------------------------------------
+  let ws = null;
+  let paused = false;
+  let subtitleTimer = null;
+
+  const send = (cmd) => ws?.readyState === WebSocket.OPEN &&
+    ws.send(JSON.stringify({ cmd }));
+
+  $("skip").onclick = () => send("skip");
+  $("playpause").onclick = () => send(paused ? "play" : "pause");
+
+  // 背景の差し替え。サーバから記事スクショの URL (/news/YYYY-MM-DD/NNNN.png)
+  // が来る。null のときは単色 (#12121c) に戻す。読み込み完了を待ってから
+  // 差し替えるので、切り替え時に一瞬素の色が見えることがない。
+  function setBackground(url) {
+    const bg = $("bg");
+    if (!url) {
+      bg.style.backgroundImage = "";
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      // 記事スクショは本文が主体で、そのまま出すと字幕や見出しと文字同士が
+      // competing してどちらも読みにくい。強めにぼかして色と構図だけ残す。
+      // 小さい画像は引き伸ばしで元から粗いので、ぼかしは控えめでよい。
+      const blur = img.naturalWidth < 900 ? 9 : 14;
+      bg.style.filter = `blur(${blur}px) brightness(.5)`;
+      bg.style.backgroundImage = `url("${url}")`;
+    };
+    img.onerror = () => (bg.style.backgroundImage = "");
+    img.src = url;
+  }
+
+  function showSubtitle(text) {
+    const el = $("subtitle");
+    el.textContent = text;
+    el.style.display = text ? "block" : "none";
+    clearTimeout(subtitleTimer);
+    if (text) {
+      // 読み上げ時間ぶん出しておく。日本語はおおよそ 7 文字/秒
+      subtitleTimer = setTimeout(
+        () => (el.style.display = "none"), 3000 + text.length * 145);
+    }
+  }
+
+  function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => setStatus("接続済み");
+    ws.onclose = () => { setStatus("再接続中…"); setTimeout(connectWS, 2000); };
+    ws.onerror = () => setStatus("WS エラー");
+
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      switch (msg.event) {
+        case "headline":
+          $("source").textContent = msg.source ? `Source: ${msg.source}` : "";
+          $("title").textContent = msg.title || "";
+          break;
+
+        case "background":
+          setBackground(msg.url);
+          break;
+
+        case "state":
+          $("phase").textContent = msg.phase || "";
+          grooving = msg.phase === "MUSIC_PLAYING";
+          break;
+
+        case "paused":
+          paused = msg.value;
+          $("playpause").textContent = paused ? "▶" : "⏸";
+          break;
+
+        case "speech":
+          scheduleVisemes(msg);
+          showSubtitle(msg.text || "");
+          break;
+
+        case "music":
+          // 音楽中は口を閉じる。字幕は自然に消えるまで残す
+          visemeSchedule = [];
+          applyViseme("sil");
+          break;
+
+        case "credit":
+          $("credit").textContent = msg.text || "";
+          break;
+
+        case "error":
+          console.warn("service error:", msg);
+          break;
+      }
+    };
+  }
+</script>
