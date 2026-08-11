@@ -410,7 +410,6 @@ alongside.
 - **The cause of HeartMuLa's short-clip cutoff (29–37%) is unknown.** Sweeping
   `tags` / `cfg_scale` / `topk` might improve the yield. **Low priority**,
   since §6.7 shows roughly 2× headroom in capacity
-- Not yet a git repository (`.gitignore` is ready)
 
 ---
 
