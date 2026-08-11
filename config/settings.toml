@@ -47,7 +47,7 @@ used_keep = 100
 # 収支の目安: 生成時間 (= 4.7 × duration_sec) ≦ reuse_count × 1サイクルの秒数
 # 5 なら消費が約 300 秒/曲。実測の生成能力は 152〜165 秒/曲 なので約 2 倍の余裕。
 # 能力は「生成していた時間 ÷ 採用曲数」で測ること。worker は在庫が pool_target に
-# 達すると休むので、「運転時間 ÷ 採用曲数」は需要で頭打ちになる (TECHNICALJ.md §6.7)。
+# 達すると休むので、「運転時間 ÷ 採用曲数」は需要で頭打ちになる (TECHNICALJ.md §6.8)。
 reuse_count = 5
 # HeartMuLa 一式 (ckpt/) の場所。bgm_worker はこの venv の python で走る
 model_path = "~/heartlib/ckpt"

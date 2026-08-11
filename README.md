@@ -203,6 +203,7 @@ no second copy to keep in sync.
 | `[bgm] reuse_count` | `5` | how many cycles one clip is replayed before retiring |
 | `[script] max_chars` | `220` | script length (≈30 s) |
 | `[script] filler_max_chars` | `60` | small-talk length (≈5–10 s) |
+| `[script] filler_gap_sec` | `0.8` | silence padded onto each filler, so back-to-back interjections do not gabble |
 | `[loudness] target_lufs` | `-16.0` | the level every wav is normalized to |
 | `[voicevox] speaker_name` | `波音リツ` | the DJ's voice; also shown in the required credit |
 | `[dj] program_name` / `persona` | | program name and DJ character |

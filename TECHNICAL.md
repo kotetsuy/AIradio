@@ -101,6 +101,11 @@ start
 LLM-generated from the program name, DJ persona and today's date.
 **A fixed fallback line is mandatory** for when the LLM fails.
 
+The name given on air is `[dj] name`. It is **distinct from
+`[voicevox] speaker_name`**, which (1) selects the voice and (2) appears in the
+credit the VOICEVOX terms require — so it must keep naming the speaker actually
+used. An empty `[dj] name` falls back to `speaker_name` (backward compatible).
+
 ### FILLER_LOOP
 
 - The fixed interjections (8 of them) are **pre-generated before startup
@@ -110,6 +115,30 @@ LLM-generated from the program name, DJ persona and today's date.
   starts as the loop is entered; interjections cover the gap
 - **Keep one piece of small talk to 5–10 seconds** (`[script] filler_max_chars`).
   Longer and the switch back to music becomes sluggish
+- **Pad the tail of every filler with silence** (`[script] filler_gap_sec`,
+  0.8 s by default). When small-talk generation cannot keep up with consumption
+  the loop falls back to interjections, and without a gap they fire about once a
+  second, which sounds like gabbling. It overrides VOICEVOX's
+  `postPhonemeLength` so the silence is **baked in at synthesis time**. Not
+  post-processed with ffmpeg, because this way `duration_sec` and the visemes
+  stay consistent and the queue timing needs no changes. Only fillers get it —
+  news and the INTRO are always followed by music or the next utterance
+
+### Trap: never let a pause stop the prefetch
+
+Putting the `paused` check **before** `_ensure_prefetch()` in `pump_loop` means
+no prefetch task is created at all while paused. `start()` does not seed one
+either (the pump loop only begins after `start()` returns), so pressing PLAY
+starts script generation from scratch.
+
+Measured: pausing for 90 s right after startup, then resuming, left generation
+unfinished when the INTRO (32 s) ended, and **45 seconds of interjections
+followed**. Each is about a second long, so 19 of them play back to back — which
+sounds exactly like "it just keeps babbling".
+
+**Prefetching is independent of playback, so a pause is no reason to stop it.**
+Move it ahead of the check, and seed one in `start()` as well. The latter speeds
+up an ordinary cold start too, pause or no pause.
 
 ---
 
@@ -289,7 +318,38 @@ plays twice in a row**.
 Play counts live in `db/state.json` under `bgm_plays`; counts for clips that
 have left the pool are dropped on the next `take_bgm`.
 
-### 6.6 Viable options not taken
+### 6.6 `used/` is insurance — neither hoard it nor lose it
+
+Retired clips are moved to `cache/bgm_pool/used/` rather than deleted, so they
+can be **copied back by hand when the pool runs dry** — which does happen (below).
+
+They still need a bound: 5 MB each, and at `reuse_count = 5` with a 60-second
+cycle the directory grows by roughly **850 clips = 4.2 GB every three days**.
+`[bgm] used_keep` (100 by default) keeps the newest by mtime, trimmed by
+`take_bgm` the moment it retires a clip.
+
+**Do not leave this to startup cleanup.** `start_all.sh` also deletes anything
+older than three days, but it only runs at startup, which never happens during a
+long broadcast.
+
+`os.utime(dst)` runs before the retired clip is returned. `shutil.move`
+preserves mtime, so without it a `reuse_count = 1` clip (never touched by
+`os.utime`) can be deleted by the very next `trim_used`, handing the caller a
+path that no longer exists.
+
+#### Refilling from `used/`
+
+Copy clips back into the pool, taking only those whose fingerprint
+(`prompt_hash`) matches the current settings and that satisfy
+`min_duration_sec`. Use `shutil.copy2` so mtime is preserved and they slot
+straight into `take_bgm`'s rotation.
+
+A real case: four restarts in quick succession during debugging drained the
+pool. `bgm_worker` needs 270 s for the first clip of a process (§6.3), so every
+restart paid that cost again. Copying 10 clips back out of `used/` left
+`FILLER_LOOP` immediately.
+
+### 6.7 Viable options not taken
 
 - **Longer scripts.** The budget is `27 + 3.8D ≦ S + D`. Keeping D=30 requires
   speech S ≧ 111 s (about 800 characters). That changes what the show *is*, so
@@ -298,7 +358,7 @@ have left the pool are dropped on the next `take_bgm`.
 - **Shorter music.** `duration_sec = 9` or less balances the books, but that is
   a jingle, not background music
 
-### 6.7 Do not measure supply as "runtime ÷ clips accepted"
+### 6.8 Do not measure supply as "runtime ÷ clips accepted"
 
 **This was gotten wrong once.**
 
@@ -409,7 +469,7 @@ alongside.
   has sat through five hours
 - **The cause of HeartMuLa's short-clip cutoff (29–37%) is unknown.** Sweeping
   `tags` / `cfg_scale` / `topk` might improve the yield. **Low priority**,
-  since §6.7 shows roughly 2× headroom in capacity
+  since §6.8 shows roughly 2× headroom in capacity
 
 ---
 
@@ -424,6 +484,6 @@ cat logs/bench_phase0.json    # required_reuse_count goes straight into settings
 ```
 
 To check the economics after a run, compute capacity as **"time spent
-generating ÷ clips accepted"** (§6.7). In the `bgm_worker` log, "プール N/M →
+generating ÷ clips accepted"** (§6.8). In the `bgm_worker` log, "プール N/M →
 生成します" marks a start and "生成:" / "短すぎるので破棄:" mark completion, so
 the sum of those intervals is the time spent generating.

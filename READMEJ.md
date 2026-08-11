@@ -201,6 +201,7 @@ PYTHONPATH=scripts ~/heartlib/.venv/bin/python scripts/bench_phase0.py --clips 3
 | `[bgm] reuse_count` | `5` | 同じ曲を何サイクル使い回してから捨てるか |
 | `[script] max_chars` | `220` | 原稿の長さ (≒30秒) |
 | `[script] filler_max_chars` | `60` | ショートトークの長さ (≒5〜10秒) |
+| `[script] filler_gap_sec` | `0.8` | フィラーの末尾に足す無音。相槌が連続するときの間 |
 | `[loudness] target_lufs` | `-16.0` | 全 wav を揃えるラウドネス |
 | `[voicevox] speaker_name` | `波音リツ` | DJ の声。規約で必要なクレジット表示にも使う |
 | `[dj] program_name` / `persona` | | 番組名と DJ 設定 |
