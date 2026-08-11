@@ -247,3 +247,19 @@ and never deletes.
 A missing `vroid/dj.vrm`, `google-chrome` or `~/heartlib/.venv` is a warning
 only and startup continues — you get no avatar, no auto-opened browser, or no
 music generation respectively.
+
+---
+
+## License
+
+[Apache License 2.0](LICENSE). Copyright 2026 Kotetsu Yamamoto.
+
+The libraries bundled under `web/libs/` (three.js and @pixiv/three-vrm) are
+redistributed unmodified under their own MIT licenses and are **not** covered by
+the Apache license above. See [NOTICE](NOTICE) for the full list, along with the
+terms attached to the services used at runtime — in particular **VOICEVOX
+requires the speaker to be credited whenever synthesized audio is published**,
+which the display in `web/` does for you.
+
+No news article text, summaries or screenshots are contained in this repository;
+those are fetched at runtime and belong to their publisher.

@@ -245,3 +245,18 @@ logs/bench_phase0.json  Phase 0 ベンチの生データ
 `vroid/dj.vrm` が無い、`google-chrome` が無い、`~/heartlib/.venv` が無いは
 いずれも警告どまりで起動は続く (それぞれアバター無し / 手動でブラウザを開く /
 BGM 生成無しになる)。
+
+---
+
+## ライセンス
+
+[Apache License 2.0](LICENSE)。Copyright 2026 Kotetsu Yamamoto。
+
+`web/libs/` に同梱している three.js と @pixiv/three-vrm は、それぞれの
+MIT ライセンスのまま無改変で再配布しているもので、**上記 Apache ライセンスの
+対象外**。全一覧と、実行時に使うサービスの利用条件は [NOTICE](NOTICE) にある。
+とくに **VOICEVOX は合成音声を公開する際に話者のクレジット表示が必要**で、
+これは `web/` の表示系が行っている。
+
+ニュース記事の本文・要約・スクリーンショットはこのリポジトリに含まれない
+(実行時に取得するもので、権利は発行元にある)。
