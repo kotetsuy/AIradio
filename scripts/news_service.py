@@ -444,9 +444,13 @@ class NewsService:
         """キューが尽きる前に次を積み続ける。無音を作らないための唯一の担保。"""
         while True:
             await asyncio.sleep(POLL_INTERVAL)
+            # 先読みは再生と独立なので一時停止中も進めておく。ここを paused の
+            # 後ろに置くと、PAUSE 中に 1 本も作られず、PLAY した瞬間にゼロから
+            # 生成が始まって長いフィラーになる (実測: 起動直後に 90 秒 PAUSE
+            # したら INTRO のあと 45 秒ぶん相槌が続いた)。
+            self._ensure_prefetch()
             if self.paused:
                 continue
-            self._ensure_prefetch()
 
             try:
                 ahead = await self.queued_seconds()
@@ -476,6 +480,11 @@ class NewsService:
         print("相槌を用意しています…", flush=True)
         await asyncio.to_thread(self.prepare_aizuchi)
         print(f"  相槌 {len(self.aizuchi)} 本", flush=True)
+
+        # 1 本目のニュースの生成をここで始める。pump_loop が動き出すのは
+        # start() が終わってからなので、ここで蒔いておかないと INTRO の
+        # 生成時間ぶんを丸ごと待つことになる。
+        self._ensure_prefetch()
 
         text = await asyncio.to_thread(dj_script.generate_intro, self.settings)
         append_script_log(self.log_path, "intro", text)
