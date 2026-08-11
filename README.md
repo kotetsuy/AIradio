@@ -203,8 +203,9 @@ no second copy to keep in sync.
 | `[script] max_chars` | `220` | script length (≈30 s) |
 | `[script] filler_max_chars` | `60` | small-talk length (≈5–10 s) |
 | `[loudness] target_lufs` | `-16.0` | the level every wav is normalized to |
-| `[voicevox] speaker_name` | `波音リツ` | the DJ's voice; also goes into the prompt |
+| `[voicevox] speaker_name` | `波音リツ` | the DJ's voice; also shown in the required credit |
 | `[dj] program_name` / `persona` | | program name and DJ character |
+| `[dj] name` | `ディージェー` | the name the DJ gives on air — distinct from `speaker_name`, which selects the voice and appears in the required credit |
 
 **Do not lower `[bgm] reuse_count`.** Music generation takes about 4.7× real
 time, so one clip per cycle cannot keep up; at 1 the show lives permanently in

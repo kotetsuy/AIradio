@@ -201,8 +201,9 @@ PYTHONPATH=scripts ~/heartlib/.venv/bin/python scripts/bench_phase0.py --clips 3
 | `[script] max_chars` | `220` | 原稿の長さ (≒30秒) |
 | `[script] filler_max_chars` | `60` | ショートトークの長さ (≒5〜10秒) |
 | `[loudness] target_lufs` | `-16.0` | 全 wav を揃えるラウドネス |
-| `[voicevox] speaker_name` | `波音リツ` | DJ の声。原稿のプロンプトにも渡る |
+| `[voicevox] speaker_name` | `波音リツ` | DJ の声。規約で必要なクレジット表示にも使う |
 | `[dj] program_name` / `persona` | | 番組名と DJ 設定 |
+| `[dj] name` | `ディージェー` | 番組内で名乗る名前。`speaker_name` とは別（後者は話者検索とクレジット表示に使う） |
 
 **`[bgm] reuse_count` は下げないこと。** BGM の生成は実時間の約 4.7 倍かかり、
 1 サイクル 1 曲では供給が追いつかない。1 にすると FILLER_LOOP が常態化する。

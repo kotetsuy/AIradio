@@ -112,7 +112,9 @@ def _system_vars(settings: dict, max_chars: int) -> dict:
         "program": dj["program_name"],
         "persona": dj["persona"],
         "source": dj["source_name"],
-        "speaker": settings["voicevox"]["speaker_name"],
+        # 番組内で名乗る名前。未設定なら VOICEVOX の話者名をそのまま使う。
+        # speaker_name 自体を変えてはいけない (話者検索とクレジット表示に使う)。
+        "speaker": dj.get("name") or settings["voicevox"]["speaker_name"],
         "max_chars": max_chars,
     }
 

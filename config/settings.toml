@@ -91,7 +91,12 @@ volume_scale = 1.6
 [dj]
 # 番組名と DJ 設定。原稿・INTRO のプロンプトに渡す
 program_name = "AIラジオ ギガジンニュース"
-persona = "落ち着いた声の、ちょっとお茶目なAIラジオDJ"
+# 番組内で名乗る名前。[voicevox] speaker_name とは別物なので注意。
+# あちらは (1) VOICEVOX の話者検索 (2) 規約で必要なクレジット表示 に使うので、
+# 実際に合成に使った話者名から変えてはいけない。
+# 空にするとこのキーは無視され、speaker_name をそのまま名乗る。
+name = "ディージェー"
+persona = "ディージェーという名前の、落ち着いた声の、ちょっとお茶目なAIラジオDJ"
 source_name = "GIGAZINE"
 
 [liquidsoap]
