@@ -73,12 +73,20 @@ def resolve_speaker_id(base_url: str, speaker_name: str, style_name: str) -> int
 
 
 def synthesize(
-    text: str, speaker_id: int, base_url: str, volume_scale: float = 1.0
+    text: str,
+    speaker_id: int,
+    base_url: str,
+    volume_scale: float = 1.0,
+    post_silence: float | None = None,
 ) -> tuple[bytes, dict]:
     """テキストを合成して (wav バイト列, audio_query) を返す。
 
     audio_query も返すのは、表示系のリップシンクが accent_phrases から viseme を
     組み立てるため。キャッシュヒット時に再問い合わせしなくて済む。
+
+    post_silence を渡すと発話のあとに無音を足す (VOICEVOX の
+    postPhonemeLength、既定 0.1 秒)。相槌が立て続けに鳴るときの間として使う。
+    wav に焼き込まれるので、長さも viseme もそのまま辻褄が合う。
     """
     with httpx.Client(timeout=TIMEOUT) as client:
         r = client.post(
@@ -87,6 +95,8 @@ def synthesize(
         r.raise_for_status()
         query = r.json()
         query["volumeScale"] = volume_scale
+        if post_silence is not None:
+            query["postPhonemeLength"] = post_silence
 
         r = client.post(
             f"{base_url}/synthesis",
@@ -99,7 +109,12 @@ def synthesize(
 
 
 def synth_to_file(
-    text: str, wav_path: Path, settings: dict, *, force: bool = False
+    text: str,
+    wav_path: Path,
+    settings: dict,
+    *,
+    force: bool = False,
+    post_silence: float | None = None,
 ) -> tuple[Path, dict]:
     """text を wav_path に合成し、(wav パス, メタ) を返す。
 
@@ -107,11 +122,17 @@ def synth_to_file(
     news_service はこの長さでトラックの終了時刻を予測し、accent_phrases から
     リップシンクの viseme を組む。wav だけあってもキャッシュヒット時に口が
     動かなくなるので、必ず両方を揃えて保存すること。
+
+    キャッシュのキーは呼び出し側が決めるファイル名 (テキストのハッシュ) だけな
+    ので、post_silence をメタに残して食い違ったら作り直す。これが無いと
+    設定を変えても古い wav が使われ続けて「変えたのに変わらない」になる。
     """
     meta_path = wav_path.with_suffix(".json")
     if not force and wav_path.exists() and meta_path.exists():
         try:
-            return wav_path, json.loads(meta_path.read_text(encoding="utf-8"))
+            cached = json.loads(meta_path.read_text(encoding="utf-8"))
+            if cached.get("post_silence") == post_silence:
+                return wav_path, cached
         except json.JSONDecodeError:
             pass  # 壊れていれば作り直す
 
@@ -120,7 +141,7 @@ def synth_to_file(
         vv["base_url"], vv["speaker_name"], vv["style_name"]
     )
     wav, query = synthesize(
-        text, speaker_id, vv["base_url"], vv.get("volume_scale", 1.0)
+        text, speaker_id, vv["base_url"], vv.get("volume_scale", 1.0), post_silence
     )
     # 音楽と交互に流すので、ここでラウドネスを揃えてから置く
     normalize_bytes(wav, wav_path, settings["loudness"])
@@ -128,6 +149,7 @@ def synth_to_file(
     meta = {
         "text": text,
         "speaker_id": speaker_id,
+        "post_silence": post_silence,
         "accent_phrases": query.get("accent_phrases", []),
         "duration_sec": wav_duration(wav_path),
     }

@@ -60,6 +60,10 @@ retry_wait_sec = 30
 max_chars = 220
 # ショートトーク上限 (およそ 5〜10 秒)
 filler_max_chars = 60
+# フィラーの末尾に足す無音 (秒)。VOICEVOX の postPhonemeLength を上書きする。
+# BGM が無い時間帯は相槌が連続するので、0 だと 1 秒間隔でまくし立てる感じになる。
+# 変更すると cache/fillers の wav は自動で作り直される (メタに焼いてある)。
+filler_gap_sec = 0.8
 # 合成後の wav がこの秒数を超えたら原稿を作り直す
 max_wav_sec = 35.0
 # 作り直しの上限回数 (超えたらそのまま流す)

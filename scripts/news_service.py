@@ -103,6 +103,8 @@ class NewsService:
         self.client = LiquidsoapClient(ls["telnet_host"], ls["telnet_port"], ls)
 
         self.lead = float(settings["program"]["prefetch_lead_sec"])
+        # フィラーの末尾に足す無音 (秒)。相槌が連続するときの間
+        self.filler_gap = float(settings["script"].get("filler_gap_sec", 0.0)) or None
         self.recent = recent_scripts(
             self.log_path, settings["llm"]["recent_scripts"], "news"
         )
@@ -170,9 +172,13 @@ class NewsService:
 
     # ---- 素材づくり ------------------------------------------------------
 
-    def _synth(self, text: str, path: Path) -> tuple[Path, dict]:
+    def _synth(
+        self, text: str, path: Path, post_silence: float | None = None
+    ) -> tuple[Path, dict]:
         """ブロッキング。必ず asyncio.to_thread 経由で呼ぶこと。"""
-        return voicevox_synth.synth_to_file(text, path, self.settings)
+        return voicevox_synth.synth_to_file(
+            text, path, self.settings, post_silence=post_silence
+        )
 
     def _build_speech(self, text: str, kind: str, article: Article | None = None) -> Item:
         """テキストを wav にして Item にする。ブロッキング。
@@ -184,9 +190,14 @@ class NewsService:
         limit = float(conf["max_wav_sec"])
         max_regen = int(conf.get("max_regen", 1))
 
+        # フィラーは連続で鳴る (相槌 → 相槌 → …) ので、末尾に間を入れないと
+        # 1 秒間隔でまくし立てる感じになる。ニュースと自己紹介は後ろに音楽か
+        # 次の発話が来るので不要。
+        gap = self.filler_gap if kind == "filler" else None
+
         for _ in range(max_regen + 1):
             name = f"{kind}_{voicevox_synth.text_hash(text)}.wav"
-            path, meta = self._synth(text, self.tts_dir / name)
+            path, meta = self._synth(text, self.tts_dir / name, gap)
             duration = meta["duration_sec"]
             if duration <= limit or len(text) <= 20:
                 break
@@ -255,7 +266,9 @@ class NewsService:
         for text in dj_script.AIZUCHI:
             try:
                 path, meta = self._synth(
-                    text, self.filler_dir / f"aizuchi_{voicevox_synth.text_hash(text)}.wav"
+                    text,
+                    self.filler_dir / f"aizuchi_{voicevox_synth.text_hash(text)}.wav",
+                    self.filler_gap,
                 )
             except (httpx.HTTPError, LookupError, AudioError) as e:
                 print(f"相槌の生成に失敗: {text} ({e})", flush=True)
