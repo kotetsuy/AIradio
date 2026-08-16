@@ -48,6 +48,7 @@ from common import (
     load_settings,
     recent_scripts,
     resolve_path,
+    stream_url,
 )
 from liquidsoap_client import LiquidsoapClient, LiquidsoapError
 from news import Article, NewsSelector
@@ -162,6 +163,9 @@ class NewsService:
             {"event": "paused", "value": self.paused},
             # VOICEVOX の利用規約で求められるクレジット表示
             {"event": "credit", "text": f"VOICEVOX:{vv['speaker_name']}"},
+            # 同じ LAN のスマホから聴けるように、配信 URL を画面に出す。
+            # 起動時に start_all.sh が表示するものと同じ URL になる。
+            {"event": "stream_url", "url": stream_url(self.settings)},
             {"event": "background", "url": self.background},
         ]
         if self.headline:
