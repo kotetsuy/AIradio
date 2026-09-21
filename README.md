@@ -121,6 +121,18 @@ LLAMA_BIN="$HOME/llama.cpp/build/bin/llama-server"
 QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 ```
 
+Startup uses ROCm 10 at `/opt/rocm/core-10.0`. For another installation,
+run `ROCM_PATH=/path/to/rocm ./start_all.sh`.
+Use a llama-server build for ROCm 10 / gfx1151; the launcher prioritizes
+`${ROCM_PATH}/lib` and `${ROCM_PATH}/lib/llvm/lib` for its libraries.
+The bind host and port come from `[llm].base_url` in `config/settings.toml`
+(default `http://localhost:9931`), including overrides in `settings.local.toml`.
+
+BGM uses the existing HeartMuLa venv and its bundled PyTorch libraries.
+The llama-specific `LD_LIBRARY_PATH` is not applied to BGM. GPU tensor
+operations and HeartMuLa imports were verified with the installed
+`torch 2.9.1+rocm7.13.0` environment.
+
 ---
 
 ## Running
@@ -146,7 +158,7 @@ Everything runs in its own window of the tmux session `airadio`.
 
 ```bash
 curl -s localhost:50021/version                    # VOICEVOX
-curl -s localhost:8080/health                      # llama-server
+curl -s localhost:9931/health                      # llama-server
 curl -s localhost:8100/status-json.xsl | head      # Icecast (a source must be connected)
 curl -s localhost:8765/ -o /dev/null -w '%{http_code}\n'   # display
 ```

@@ -40,7 +40,7 @@ English: [TECHNICAL.md](TECHNICAL.md)。
 |---|---|---|
 | `news_service.py` | `AIradio/.venv` | 番組進行・原稿生成・TTS・表示系 HTTP/WebSocket (:8765) |
 | `bgm_worker.py` | `~/heartlib/.venv` | HeartMuLa で BGM を生成しプールへ置く |
-| llama-server | — | 原稿生成 (:8080) |
+| llama-server | — | 原稿生成 (:9931) |
 | VOICEVOX ENGINE | docker | TTS (:50021) |
 | Liquidsoap | — | 積まれた wav を順に再生 (telnet :1234) |
 | Icecast | — | 配信 (:8100) |

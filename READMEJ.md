@@ -119,6 +119,17 @@ LLAMA_BIN="$HOME/llama.cpp/build/bin/llama-server"
 QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 ```
 
+起動時は ROCm 10 の `/opt/rocm/core-10.0` を使用する。別の配置なら
+`ROCM_PATH=/path/to/rocm ./start_all.sh` で指定する。
+llama-server は ROCm 10 / gfx1151 対応ビルドを使い、ライブラリも
+`${ROCM_PATH}/lib` と `${ROCM_PATH}/lib/llvm/lib` を優先する。
+待受ホストとポートは `config/settings.toml` の `[llm].base_url`
+(既定 `http://localhost:9931`) から読み取る。`settings.local.toml` の上書きも有効。
+
+BGM は既存の HeartMuLa venv とその PyTorch 同梱ライブラリを使用する。
+llama 用の `LD_LIBRARY_PATH` は BGM に適用しない。この環境では
+`torch 2.9.1+rocm7.13.0` の GPU 演算と HeartMuLa の import を確認済み。
+
 ---
 
 ## 起動 / 停止
@@ -144,7 +155,7 @@ QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 
 ```bash
 curl -s localhost:50021/version                    # VOICEVOX
-curl -s localhost:8080/health                      # llama-server
+curl -s localhost:9931/health                      # llama-server
 curl -s localhost:8100/status-json.xsl | head      # Icecast (source が居ること)
 curl -s localhost:8765/ -o /dev/null -w '%{http_code}\n'   # 表示系
 ```

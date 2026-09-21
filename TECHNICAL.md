@@ -40,7 +40,7 @@ Japanese file.
 |---|---|---|
 | `news_service.py` | `AIradio/.venv` | Show logic, script generation, TTS, display HTTP/WebSocket (:8765) |
 | `bgm_worker.py` | `~/heartlib/.venv` | Generates music with HeartMuLa into the pool |
-| llama-server | — | Script generation (:8080) |
+| llama-server | — | Script generation (:9931) |
 | VOICEVOX ENGINE | docker | TTS (:50021) |
 | Liquidsoap | — | Plays whatever is queued, in order (telnet :1234) |
 | Icecast | — | Streaming (:8100) |

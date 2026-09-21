@@ -3,7 +3,7 @@
 #
 # 起動順 (前のものが上がってから次に進む):
 #   1. VOICEVOX ENGINE (docker)   :50021
-#   2. llama-server (Qwen3.6)     :8080
+#   2. llama-server (Qwen3.6)     :9931
 #   3. Icecast                    :8100   ← config/icecast.xml (sudo不要)
 #   4. Liquidsoap                 :1234 (telnet) → Icecast へ配信
 #   5. 相槌の事前生成 (無ければ作る。あればスキップ)
@@ -26,8 +26,6 @@ SESSION="airadio"
 
 LLAMA_BIN="$HOME/llama.cpp/build/bin/llama-server"
 QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
-LLAMA_HOST="127.0.0.1"
-LLAMA_PORT="8080"
 LLAMA_CTX="8192"
 LLAMA_NGL="99"
 
@@ -50,7 +48,8 @@ export PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}"
 # HSA_OVERRIDE_GFX_VERSION は設定しない。llama.cpp も torch も gfx1151 の
 # ネイティブビルドなので override すると壊れる。
 unset HSA_OVERRIDE_GFX_VERSION
-export ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
+# このマシンの ROCm 10 配置。別の配置では ROCM_PATH で上書きできる。
+export ROCM_PATH="${ROCM_PATH:-/opt/rocm/core-10.0}"
 export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"
 export AMDGPU_TARGETS="${AMDGPU_TARGETS:-gfx1151}"
 
@@ -119,11 +118,19 @@ command -v google-chrome >/dev/null || warn "google-chrome が見つかりませ
 
 # ポートは settings.toml から取る (スクリプトと設定の二重管理を避ける)。
 # load_settings 経由なので settings.local.toml の上書きも効く。
-eval "$(.venv/bin/python - <<'PY'
+SETTINGS_ENV=$(.venv/bin/python - <<'PY'
+import shlex
 import sys
+from urllib.parse import urlsplit
 sys.path.insert(0, "scripts")
 from common import load_settings, resolve_path
 s = load_settings()
+u = urlsplit(s["llm"]["base_url"])
+if u.scheme != "http" or not u.hostname or u.username or u.password or u.path not in ("", "/") or u.query or u.fragment:
+    raise SystemExit("[llm].base_url must be an http://host:port URL")
+print(f"LLAMA_HOST={shlex.quote(u.hostname)}")
+print(f"LLAMA_PORT={u.port or 80}")
+print(f"LLAMA_HEALTH_URL={shlex.quote(s['llm']['base_url'].rstrip('/') + '/health')}")
 print(f'ICECAST_PORT={s["icecast"]["port"]}')
 print(f'ICECAST_MOUNT={s["icecast"]["mount"]}')
 print(f'TELNET_HOST={s["liquidsoap"]["telnet_host"]}')
@@ -131,9 +138,11 @@ print(f'TELNET_PORT={s["liquidsoap"]["telnet_port"]}')
 print(f'WEB_PORT={s["program"]["websocket_port"]}')
 print(f'CRAWLER_DIR={resolve_path(s["news"]["crawler_dir"])}')
 PY
-)"
+) || die "設定の読み込みに失敗しました"
+eval "$SETTINGS_ENV"
 
-BROWSER_URL="http://localhost:${WEB_PORT}/"
+# 同じポートを使っていた AIjukebox の HTML キャッシュと区別する。
+BROWSER_URL="http://localhost:${WEB_PORT}/?app=airadio"
 
 if [[ ! -d "$CRAWLER_DIR" ]]; then
     warn "ニュースがありません: ${CRAWLER_DIR}"
@@ -176,14 +185,17 @@ wait_http "VOICEVOX" "http://localhost:50021/version" 60
 
 # ---- 2. llama-server ----------------------------------------------------
 
-new_window "llama" "ROCM_PATH=${ROCM_PATH} \
-HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES} \
-LD_LIBRARY_PATH=/usr/local/lib:/opt/rocm/lib:/opt/rocm/lib/llvm/lib \
-${LLAMA_BIN} -m ${QWEN_MODEL} --host ${LLAMA_HOST} --port ${LLAMA_PORT} \
--ngl ${LLAMA_NGL} -c ${LLAMA_CTX} -fit off"
+# tmux サーバーに古い環境が残っていても、ROCm 10 を優先して使う。
+# この LD_LIBRARY_PATH は llama 専用。torch の同梱ライブラリには干渉しない。
+printf -v LLAMA_COMMAND '%q ' env -u HSA_OVERRIDE_GFX_VERSION \
+    "ROCM_PATH=${ROCM_PATH}" "HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES}" \
+    "LD_LIBRARY_PATH=${ROCM_PATH}/lib:${ROCM_PATH}/lib/llvm/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+    "$LLAMA_BIN" -m "$QWEN_MODEL" --host "$LLAMA_HOST" --port "$LLAMA_PORT" \
+    -ngl "$LLAMA_NGL" -c "$LLAMA_CTX" -fit off
+new_window "llama" "$LLAMA_COMMAND"
 
 # モデルロードに時間がかかるのでタイムアウト長め
-wait_http "llama-server" "http://${LLAMA_HOST}:${LLAMA_PORT}/health" 600
+wait_http "llama-server" "$LLAMA_HEALTH_URL" 600
 
 # ---- 3. Icecast ---------------------------------------------------------
 # /etc/icecast2 は使わない。config/icecast.xml は chroot / changeowner を
@@ -211,7 +223,7 @@ log "相槌を用意します"
 # LLM 側だから (BGM は遅れてもフィラーで繋げるが、原稿が作れないと詰む)。
 
 if [[ -x "$HEART_PYTHON" ]]; then
-    new_window "bgm" "PYTHONPATH=$(pwd)/scripts ROCM_PATH=${ROCM_PATH} \
+    new_window "bgm" "env -u HSA_OVERRIDE_GFX_VERSION PYTHONPATH=$(pwd)/scripts ROCM_PATH=${ROCM_PATH} \
 HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES} \
 ${HEART_PYTHON} scripts/bgm_worker.py"
 else
@@ -245,7 +257,7 @@ cat <<EOF
    表示系      : ${BROWSER_URL}   ← Chrome で自動オープン
    ネットラジオ: http://${LAN_IP:-<このマシンのIP>}:${ICECAST_PORT}/${ICECAST_MOUNT}
    VOICEVOX    : http://localhost:50021/docs
-   llama-server: http://${LLAMA_HOST}:${LLAMA_PORT}/health
+   llama-server: ${LLAMA_HEALTH_URL}
    Liquidsoap  : telnet ${TELNET_HOST} ${TELNET_PORT}
    ニュース    : ${CRAWLER_DIR}
 
