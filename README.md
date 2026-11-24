@@ -121,9 +121,9 @@ LLAMA_BIN="$HOME/llama.cpp/build/bin/llama-server"
 QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 ```
 
-Startup uses ROCm 10 at `/opt/rocm/core-10.0`. For another installation,
+Startup uses ROCm 10.2 at `/opt/rocm/core-10.2`. For another installation,
 run `ROCM_PATH=/path/to/rocm ./start_all.sh`.
-Use a llama-server build for ROCm 10 / gfx1151; the launcher prioritizes
+Use a llama-server build for ROCm 10.2 / gfx1151; the launcher prioritizes
 `${ROCM_PATH}/lib` and `${ROCM_PATH}/lib/llvm/lib` for its libraries.
 The bind host and port come from `[llm].base_url` in `config/settings.toml`
 (default `http://localhost:9931`), including overrides in `settings.local.toml`.

@@ -48,8 +48,8 @@ export PULSE_SERVER="${PULSE_SERVER:-unix:${XDG_RUNTIME_DIR}/pulse/native}"
 # HSA_OVERRIDE_GFX_VERSION は設定しない。llama.cpp も torch も gfx1151 の
 # ネイティブビルドなので override すると壊れる。
 unset HSA_OVERRIDE_GFX_VERSION
-# このマシンの ROCm 10 配置。別の配置では ROCM_PATH で上書きできる。
-export ROCM_PATH="${ROCM_PATH:-/opt/rocm/core-10.0}"
+# このマシンの ROCm 10.2 配置。別の配置では ROCM_PATH で上書きできる。
+export ROCM_PATH="${ROCM_PATH:-/opt/rocm/core-10.2}"
 export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"
 export AMDGPU_TARGETS="${AMDGPU_TARGETS:-gfx1151}"
 

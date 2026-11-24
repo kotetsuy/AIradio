@@ -119,9 +119,9 @@ LLAMA_BIN="$HOME/llama.cpp/build/bin/llama-server"
 QWEN_MODEL="$HOME/AIassistant/qwen3.6/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 ```
 
-起動時は ROCm 10 の `/opt/rocm/core-10.0` を使用する。別の配置なら
+起動時は ROCm 10.2 の `/opt/rocm/core-10.2` を使用する。別の配置なら
 `ROCM_PATH=/path/to/rocm ./start_all.sh` で指定する。
-llama-server は ROCm 10 / gfx1151 対応ビルドを使い、ライブラリも
+llama-server は ROCm 10.2 / gfx1151 対応ビルドを使い、ライブラリも
 `${ROCM_PATH}/lib` と `${ROCM_PATH}/lib/llvm/lib` を優先する。
 待受ホストとポートは `config/settings.toml` の `[llm].base_url`
 (既定 `http://localhost:9931`) から読み取る。`settings.local.toml` の上書きも有効。
